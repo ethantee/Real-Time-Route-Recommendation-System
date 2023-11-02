@@ -52,7 +52,7 @@ float heuristic(int source, int target) {
 // Task to generate user queries
 void generateQuery(void* pvParameters) {
     int totalQueries = 0;
-    while (totalQueries < 20) {
+    while (totalQueries < 50) {
         int source = rand() % 11;
         int target = rand() % 11;
         
@@ -149,7 +149,7 @@ void generateQuery(void* pvParameters) {
 }
 
 void monitorQueries(void* pvParameters) {
-    while (totalQueriesGlobal < 20) {
+    while (totalQueriesGlobal < 50) {
         vTaskDelay(pdMS_TO_TICKS(1000));
     }
 
