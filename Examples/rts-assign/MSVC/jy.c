@@ -20,20 +20,20 @@ const char *mallNames[] = {"AMTM", "APBJ", "AKSM", "BSC", "BTS"};
 
 // Connection adjacency matrix between shopping malls; value = {-1, 1} - static
 int connectionMatrix[N][N] = {
-  {-1, 1, 1, 1, 1},    // Connections from AEON Mall Taman Maluri (A_M_T_M)
-  {1, -1, 1, 1, 1},    // Connections from Aurora Place Bukit Jalil (A_P_B_J)
-  {1, 1, -1, 1, -1},    // Connections from Avenue K Shopping Mall (A_K_S_M)
-  {1, 1, -1, -1, -1},    // Connections from Bangsar Shopping Centre (B_S_C)
-  {1, -1, -1, 1, -1},    // Connections from Berjaya Times Square (B_T_S)
+  {-1, 1, 1, 1, 1},     // AMTM
+  {1, -1, 1, 1, 1},     // APBJ
+  {1, 1, -1, 1, -1},    // AKSM
+  {1, 1, -1, -1, -1},   // BSC
+  {1, -1, -1, 1, -1},   // BTS
 };
 
 // Distance adjacency matrix between shopping malls; value = {distances, -1} - static
 double distanceMatrix[N][N] = {
-  {-1.0, 14.5, 7.6, 13.0, 4.0},    // Distances from AEON Mall Taman Maluri (A_M_T_M)
-  {14.6, -1.0, 17.4, 13.6, 14.4},    // Distances from Aurora Place Bukit Jalil (A_P_B_J)
-  {7.3, 22.1, -1.0, 9.6, -1.0},    // Distances from Avenue K Shopping Mall (A_K_S_M)
-  {11.2, 13.1, -1.0, -1.0, -1.0},    // Distances from Bangsar Shopping Centre (B_S_C)
-  {3.4, -1.0, -1.0, 9.1, -1.0},    // Distances from Berjaya Times Square (B_T_S)
+  {-1.0, 14.5, 7.6, 13.0, 4.0},     // AMTM
+  {14.6, -1.0, 17.4, 13.6, 14.4},   // APBJ
+  {7.3, 22.1, -1.0, 9.6, -1.0},     // AKSM
+  {11.2, 13.1, -1.0, -1.0, -1.0},   // BSC
+  {3.4, -1.0, -1.0, 9.1, -1.0},     // BTS
 };
 
 // Traffic condition adjacency matrix between shopping malls; value = {1 < x < 5, -1} - dynamic
