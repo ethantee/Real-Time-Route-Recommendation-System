@@ -213,7 +213,7 @@ void generateQuery(void* pvParameters) {
         Node nodes[N];
         int path[N];
         int pathLength = 0;
-        float totalDistance = 0; // Use this for both static distance and weighted distance
+        float totalDistance = 0;
 
         findShortestPath(source, target, nodes, path, &pathLength, &totalDistance);
 
