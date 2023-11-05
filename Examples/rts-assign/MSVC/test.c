@@ -22,7 +22,7 @@ enum Malls {
 // Mall names
 const char* mallNames[N] = { "AMTM", "APBJ", "AKSM", "BSC", "BTS", "BMSC", "BBP", "DCM", "EP", "F88", "GDSM" };
 
-// Connection adjacency matrix (1 = connected, -1 = not connected) - static
+// Connection adjacency matrix (1 = connected, INF = not connected) - static
 int connectionMatrix[11][11] = {
     {INF, 1, 1, 1, 1, 1, INF, INF, 1, 1, 1},            // AMTM
     {1, INF, 1, 1, 1, 1, INF, INF, 1, INF, 1},          // APBJ
@@ -52,19 +52,21 @@ float distanceMatrix[11][11] = {
     {16.2, 17.3, 14, 6.6, INF, 13.1, INF, INF, 18.5, INF, INF}      // GDSM
 };
 
-// Traffic condition adjacency matrix (1 = light traffic, 5 = heavy traffic) - dynamic
+// Traffic condition adjacency matrix (1 = light traffic, 2 = heavy traffic) - dynamic
 double trafficMatrix[N][N];
 
 // Weight adjacency matrix (Distance * Traffic) - dynamic
 double weightMatrix[N][N];
 
-void incrementTrafficOnPath(int path[], int pathLength) {
+void updateTrafficMatrix(int path[], int pathLength) {
     for (int i = 0; i < pathLength - 1; i++) {
         int from = path[i];
         int to = path[i + 1];
 
-        if (trafficMatrix[from][to] != -1) {
-            trafficMatrix[from][to] += 0.5;
+        if (trafficMatrix[from][to] != -1 & trafficMatrix[from][to] < 2.0) {
+            if (trafficMatrix[from][to] != -1) {
+                trafficMatrix[from][to] += 0.1;
+            }
         }
     }
 }
@@ -94,7 +96,7 @@ void printTrafficMatrix() {
     for (int i = 0; i < N; i++) {
         for (int j = 0; j < N; j++) {
             if (trafficMatrix[i][j] == -1) {
-                printf("INF\t");
+                printf("-\t");
             }
             else {
                 printf("%.1f\t", trafficMatrix[i][j]);
@@ -116,11 +118,11 @@ typedef struct Node {
 
 // Heuristic function
 float heuristic(int source, int target) {
-    return 0; // Zero heuristic turns A* into Dijkstra's algorithm
+    return 0;
 }
 
 // A* algorithm function to find the shortest path
-void findShortestPath(int source, int target, Node nodes[N], int path[N], int* pathLength) {
+void findShortestPath(int source, int target, Node nodes[N], int path[N], int* pathLength, float* totalDistance) {
     int visited[N] = { 0 };
 
     // Initialize nodes
@@ -128,12 +130,12 @@ void findShortestPath(int source, int target, Node nodes[N], int path[N], int* p
         nodes[i].id = i;
         nodes[i].parent_id = -1;
         nodes[i].g_cost = INF;
-        nodes[i].h_cost = heuristic(i, target); // Precompute heuristic for all nodes
+        nodes[i].h_cost = heuristic(i, target);
         nodes[i].f_cost = INF;
     }
 
     nodes[source].g_cost = 0;
-    nodes[source].f_cost = nodes[source].h_cost; // For the source, f_cost is simply the heuristic
+    nodes[source].f_cost = nodes[source].h_cost;
 
     while (true) {
         Node* current = NULL;
@@ -156,16 +158,19 @@ void findShortestPath(int source, int target, Node nodes[N], int path[N], int* p
 
         // Update neighbours based on the weightMatrix instead of distanceMatrix
         for (int i = 0; i < N; i++) {
-            if (weightMatrix[current->id][i] != INF && !visited[i]) { // Use weightMatrix
+            if (weightMatrix[current->id][i] != INF && !visited[i]) {
                 float tentative_g_cost = current->g_cost + weightMatrix[current->id][i];
                 if (tentative_g_cost < nodes[i].g_cost) {
                     nodes[i].parent_id = current->id;
                     nodes[i].g_cost = tentative_g_cost;
-                    nodes[i].f_cost = nodes[i].g_cost + nodes[i].h_cost; // Update f_cost
+                    nodes[i].f_cost = nodes[i].g_cost + nodes[i].h_cost;
                 }
             }
         }
     }
+
+    // Initialize total distance
+    *totalDistance = 0;
 
     // Reconstruct the path
     *pathLength = 0;
@@ -175,7 +180,7 @@ void findShortestPath(int source, int target, Node nodes[N], int path[N], int* p
         current_id = nodes[current_id].parent_id;
     }
     if (current_id != -1) {
-        path[(*pathLength)++] = source; // Add the source at the end
+        path[(*pathLength)++] = source;
     }
     // Reverse the path array to get the correct order from source to target
     for (int i = 0; i < *pathLength / 2; i++) {
@@ -183,46 +188,46 @@ void findShortestPath(int source, int target, Node nodes[N], int path[N], int* p
         path[i] = path[*pathLength - i - 1];
         path[*pathLength - i - 1] = temp;
     }
+
+    // Calculate the total static distance based on the reconstructed path
+    for (int i = 0; i < *pathLength - 1; i++) {
+        *totalDistance += distanceMatrix[path[i]][path[i + 1]];
+    }
 }
 
 // Task to generate user queries
 void generateQuery(void* pvParameters) {
-    // Seed the random number generator
     srand(time(NULL));
 
     int totalQueries = 0;
     while (totalQueries < 100) {
-        printTrafficMatrix();
-
         int source = rand() % N;
         int target = rand() % N;
-
-        // Ensure source and target are not the same
         while (source == target) {
             target = rand() % N;
         }
 
-        int speed = generateRandomSpeed(); // Generate a random speed for this user query
-
-        // Print User query number and source-destination pair
+        int speed = generateRandomSpeed();
         printf("User %d\t\t: %d -> %d\n", totalQueries + 1, source, target);
 
-        Node nodes[N]; // Create an array of nodes for the A* algorithm
-        int path[N]; // Array to store the shortest path
-        int pathLength = 0; // Variable to store the length of the path
+        Node nodes[N];
+        int path[N];
+        int pathLength = 0;
+        float totalDistance = 0; // Use this for both static distance and weighted distance
 
-        findShortestPath(source, target, nodes, path, &pathLength);
+        findShortestPath(source, target, nodes, path, &pathLength, &totalDistance);
 
-        if (pathLength > 0) { // If a path is found
-            incrementTrafficOnPath(path, pathLength); // Increment the traffic along the path
-            updateWeightMatrix(); // Update the weight matrix based on the new traffic conditions
+        // Calculate travelling time based on the total distance and speed
+        float travellingTimeMinutes = (totalDistance / speed) * 60;
+
+        // Calculate the total weighted distance and real time based on the reconstructed path
+        float totalWeightedDistance = 0;
+        for (int i = 0; i < pathLength - 1; i++) {
+            totalWeightedDistance += distanceMatrix[path[i]][path[i + 1]] * trafficMatrix[path[i]][path[i + 1]];
         }
+        float realTimeMinutes = (totalWeightedDistance / speed) * 60;
 
-        // Calculate travelling time in hours and then convert to minutes
-        float travellingTimeHours = nodes[target].g_cost / speed;
-        float travellingTimeMinutes = travellingTimeHours * 60;
-
-        // Print the shortest path, speed, distance and travelling time
+        // Print the shortest path
         printf("Shortest Path\t: ");
         for (int i = 0; i < pathLength; i++) {
             printf("%d", path[i]);
@@ -232,33 +237,38 @@ void generateQuery(void* pvParameters) {
         }
 
         printf("\nSpeed\t\t: %d km/h\n", speed);
-        printf("Distance\t: %.2f km\n", nodes[target].g_cost);
-        printf("Travelling Time\t: %.2f minute(s)\n\n", travellingTimeMinutes);
+        printf("Distance\t: %.2f km\n", totalDistance);
+        printf("Travelling Time\t: %.2f minute(s)\n", travellingTimeMinutes);
+        printf("Real Time\t: %.2f minute(s)\n\n", realTimeMinutes);
 
-        // Increment totalQueries after processing each query
+        // Update matrices only if a path is found
+        if (pathLength > 0) {
+            updateTrafficMatrix(path, pathLength); // This will update the traffic conditions
+            updateWeightMatrix(); // This will update the weights based on new traffic conditions
+        }
+
         totalQueries++;
-
-        vTaskDelay(5); // Delay for task scheduling
+        vTaskDelay(5);
     }
 
-    vTaskDelete(NULL); // Delete the task when done
+    vTaskDelete(NULL);
 }
 
 int main() {
-    // Set initial traffic conditions to 1.0 for all connected paths
+    // Initialize traffic matrix
     for (int i = 0; i < N; i++) {
         for (int j = 0; j < N; j++) {
             if (distanceMatrix[i][j] != INF) {
-                trafficMatrix[i][j] = 1.0; // Initial traffic condition
+                trafficMatrix[i][j] = 1.0;
             }
             else {
-                trafficMatrix[i][j] = -1; // No connection
+                trafficMatrix[i][j] = -1;
             }
         }
     }
 
     updateWeightMatrix();
-    xTaskCreate(generateQuery, "QueryGenerator", 1000, NULL, 1, NULL);
+    xTaskCreate(generateQuery, "QueryGenerator", 1024, NULL, 1, NULL);
     vTaskStartScheduler();
 
     return 0;
