@@ -22,22 +22,7 @@ enum Malls {
 // Mall names
 const char* mallNames[N] = { "AMTM", "APBJ", "AKSM", "BSC", "BTS", "BMSC", "BBP", "DCM", "EP", "F88", "GDSM" };
 
-// Connection adjacency matrix (1 = connected, INF = not connected) - static
-int connectionMatrix[11][11] = {
-    {INF, 1, 1, 1, 1, 1, INF, INF, 1, 1, 1},            // AMTM
-    {1, INF, 1, 1, 1, 1, INF, INF, 1, INF, 1},          // APBJ
-    {1, 1, INF, 1, INF, 1, INF, INF, 1, INF, 1},        // AKSM
-    {1, 1, INF, INF, INF, 1, INF, 1, 1, INF, 1},        // BSC
-    {1, INF, INF, 1, INF, 1, INF, INF, 1, INF, 1},      // BTS
-    {1, 1, INF, 1, INF, INF, INF, INF, 1, INF, 1},      // BMSC
-    {INF, INF, INF, 1, INF, 1, INF, INF, 1, INF, 1},    // BBP
-    {1, 1, INF, INF, 1, 1, 1, INF, 1, INF, 1},          // DCM
-    {1, 1, 1, 1, 1, 1, INF, INF, INF, INF, 1},          // EP
-    {1, INF, INF, INF, 1, INF, INF, INF, 1, INF, INF},  // F88
-    {1, 1, 1, 1, INF, 1, INF, INF, 1, INF, INF}         // GDSM
-};
-
-// Distance adjacency matrix (in KM) - static
+// Distance adjacency matrix (in KM, INF = not connected) - static
 float distanceMatrix[11][11] = {
     {INF, 14.5, 7.6, 13, 4, 15.2, INF, INF, 14.8, 5.4, 17.7},       // AMTM
     {14.6, INF, 17.4, 13.6, 14.4, 26.1, INF, INF, 5.3, INF, 14.5},  // APBJ
