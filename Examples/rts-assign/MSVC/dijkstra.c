@@ -11,8 +11,8 @@
 
 #define N 11 // Number of malls
 #define INF FLT_MAX // Use this for infinity in distances
-#define MIN_SPEED 20 // Minimum speed in KM/H
-#define MAX_SPEED 100 // Maximum speed in KM/H
+#define MIN_SPEED 20 // Minimum speed in km/h
+#define MAX_SPEED 100 // Maximum speed in km/h
 
 // Enumerate shopping malls
 enum Malls {
@@ -110,96 +110,77 @@ void printTrafficMatrix() {
 // Define a struct for a node
 typedef struct Node {
     int id;
-    int parent_id;
-    float g_cost;
-    float h_cost;
-    float f_cost;
+    float dist;
+    int prev;
 } Node;
 
-// Heuristic function
-float heuristic(int source, int target) {
-    return 0;
-}
-
-// A* algorithm function to find the shortest path
+// Dijkstra's Algorithm
 void findShortestPath(int source, int target, Node nodes[N], int path[N], int* pathLength, float* totalDistance) {
     int visited[N] = { 0 };
 
     // Initialize nodes
     for (int i = 0; i < N; i++) {
         nodes[i].id = i;
-        nodes[i].parent_id = -1;
-        nodes[i].g_cost = INF;
-        nodes[i].h_cost = heuristic(i, target);
-        nodes[i].f_cost = INF;
+        nodes[i].dist = INF;
+        nodes[i].prev = -1;
     }
 
-    nodes[source].g_cost = 0;
-    nodes[source].f_cost = nodes[source].h_cost;
+    nodes[source].dist = 0;
 
-    while (true) {
-        Node* current = NULL;
-        float min_f_cost = INF;
-
-        // Find the node with the lowest f_cost
+    for (int count = 0; count < N - 1; count++) {
+        // Pick the minimum distance node from the set of nodes not yet processed
+        int u = -1;
+        float minDist = INF;
         for (int i = 0; i < N; i++) {
-            if (!visited[i] && nodes[i].f_cost < min_f_cost) {
-                min_f_cost = nodes[i].f_cost;
-                current = &nodes[i];
+            if (!visited[i] && nodes[i].dist <= minDist) {
+                minDist = nodes[i].dist;
+                u = i;
             }
         }
 
-        // No path exists or target found
-        if (current == NULL || current->id == target) {
+        // If no unvisited node is found, break the loop
+        if (u == -1) {
             break;
         }
 
-        visited[current->id] = 1; // Mark as visited
+        // Mark the picked node as processed
+        visited[u] = 1;
 
-        // Update neighbours based on the weightMatrix instead of distanceMatrix
-        for (int i = 0; i < N; i++) {
-            if (weightMatrix[current->id][i] != INF && !visited[i]) {
-                float tentative_g_cost = current->g_cost + weightMatrix[current->id][i];
-                if (tentative_g_cost < nodes[i].g_cost) {
-                    nodes[i].parent_id = current->id;
-                    nodes[i].g_cost = tentative_g_cost;
-                    nodes[i].f_cost = nodes[i].g_cost + nodes[i].h_cost;
-                }
+        // Update dist value of the adjacent nodes of the picked node
+        for (int v = 0; v < N; v++) {
+            if (!visited[v] && weightMatrix[u][v] != INF && nodes[u].dist + weightMatrix[u][v] < nodes[v].dist) {
+                nodes[v].dist = nodes[u].dist + weightMatrix[u][v];
+                nodes[v].prev = u;
             }
         }
     }
 
-    // Initialize total distance
-    *totalDistance = 0;
+    // Reconstruct the shortest path from source to target
+    int stack[N];
+    int stackSize = 0;
+    int u = target;
 
-    // Reconstruct the path
-    *pathLength = 0;
-    int current_id = target;
-    while (current_id != source && current_id != -1) {
-        path[(*pathLength)++] = current_id;
-        current_id = nodes[current_id].parent_id;
-    }
-    if (current_id != -1) {
-        path[(*pathLength)++] = source;
-    }
-    // Reverse the path array to get the correct order from source to target
-    for (int i = 0; i < *pathLength / 2; i++) {
-        int temp = path[i];
-        path[i] = path[*pathLength - i - 1];
-        path[*pathLength - i - 1] = temp;
+    while (nodes[u].prev != -1) {
+        stack[stackSize++] = u;
+        u = nodes[u].prev;
     }
 
-    // Calculate the total static distance based on the reconstructed path
-    for (int i = 0; i < *pathLength - 1; i++) {
-        *totalDistance += distanceMatrix[path[i]][path[i + 1]];
+    // If the target is reachable from the source
+    if (nodes[target].dist != INF) {
+        stack[stackSize++] = source;
+        *pathLength = 0;
+        // Reverse path stack to get correct order
+        while (stackSize) {
+            path[(*pathLength)++] = stack[--stackSize];
+        }
+        *totalDistance = nodes[target].dist;
     }
 }
 
-// Task to generate user queries
 void generateQuery(void* pvParameters) {
     srand(time(NULL));
-
     int totalQueries = 0;
+
     while (totalQueries < 100) {
         int source = rand() % N;
         int target = rand() % N;
@@ -214,17 +195,22 @@ void generateQuery(void* pvParameters) {
         int path[N];
         int pathLength = 0;
         float totalDistance = 0;
-
-        findShortestPath(source, target, nodes, path, &pathLength, &totalDistance);
-
-        // Calculate travelling time based on the total distance and speed
-        float travellingTimeMinutes = (totalDistance / speed) * 60;
-
-        // Calculate the total weighted distance and real time based on the reconstructed path
         float totalWeightedDistance = 0;
+
+        // Make sure to update weight matrix before finding shortest path
+        updateWeightMatrix();
+        findShortestPath(source, target, nodes, path, &pathLength, &totalWeightedDistance);
+
+        // Calculate travelling time based on the total distance
+        float travellingTimeMinutes = 0;
         for (int i = 0; i < pathLength - 1; i++) {
-            totalWeightedDistance += distanceMatrix[path[i]][path[i + 1]] * trafficMatrix[path[i]][path[i + 1]];
+            int from = path[i];
+            int to = path[i + 1];
+            totalDistance += distanceMatrix[from][to];
         }
+        travellingTimeMinutes = (totalDistance / speed) * 60;
+
+        // Calculate real time based on the total weighted distance
         float realTimeMinutes = (totalWeightedDistance / speed) * 60;
 
         // Print the shortest path
@@ -232,8 +218,8 @@ void generateQuery(void* pvParameters) {
         for (int i = 0; i < pathLength; i++) {
             printf("%d", path[i]);
             if (i < pathLength - 1) {
-                printf(" -> ");
-            }
+				printf(" -> ");
+			}
         }
 
         printf("\nSpeed\t\t: %d km/h\n", speed);
@@ -241,10 +227,9 @@ void generateQuery(void* pvParameters) {
         printf("Travelling Time\t: %.2f minute(s)\n", travellingTimeMinutes);
         printf("Real Time\t: %.2f minute(s)\n\n", realTimeMinutes);
 
-        // Update matrices only if a path is found
+        // Update traffic matrix only if a path is found
         if (pathLength > 0) {
-            updateTrafficMatrix(path, pathLength); // This will update the traffic conditions
-            updateWeightMatrix(); // This will update the weights based on new traffic conditions
+            updateTrafficMatrix(path, pathLength);
         }
 
         totalQueries++;
