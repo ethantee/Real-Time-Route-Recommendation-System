@@ -86,7 +86,10 @@
     <ClCompile Include="..\..\..\FreeRTOS_Source\tasks.c" />
     <ClCompile Include="..\..\..\FreeRTOS_Source\timers.c" />
     <ClCompile Include="..\..\..\Supporting_Functions\supporting_functions.c" />
+    <ClCompile Include="..\main.c" />
     <ClCompile Include="dijkstra.c" />
+    <ClCompile Include="main_test.c" />
+    <ClCompile Include="test.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\..\FreeRTOS_Source\include\event_groups.h" />

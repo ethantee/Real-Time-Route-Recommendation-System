@@ -9,10 +9,10 @@
 
 #include "supporting_functions.h"
 
-#define N 11 // Number of malls
-#define INF FLT_MAX // Use this for infinity in distances
-#define MIN_SPEED 20 // Minimum speed in km/h
-#define MAX_SPEED 100 // Maximum speed in km/h
+#define N 11            // Number of malls
+#define INF FLT_MAX     // Use this for infinity in distances
+#define MIN_SPEED 5     // Minimum speed in km/h
+#define MAX_SPEED 140   // Maximum speed in km/h
 
 // Enumerate shopping malls
 enum Malls {
@@ -203,8 +203,8 @@ void generateQuery(void* pvParameters) {
         for (int i = 0; i < pathLength; i++) {
             printf("%d", path[i]);
             if (i < pathLength - 1) {
-				printf(" -> ");
-			}
+                printf(" -> ");
+            }
         }
 
         printf("\nSpeed\t\t: %d km/h\n", speed);
