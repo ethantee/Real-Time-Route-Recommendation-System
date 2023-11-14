@@ -12,7 +12,7 @@
 
 #define N 11				// number of malls
 #define INF FLT_MAX			// infinity in distances
-#define MAX_QUERIES 10000	// maximum number of user queries
+#define MAX_QUERIES 1000	// maximum number of user queries
 #define MIN_SPEED 5			// minimum speed in km/h
 #define MAX_SPEED 140		// maximum speed in km/h
 
@@ -60,11 +60,29 @@ float distanceMatrix[N][N] = {
 	{16.2, 17.3, 14, 6.6, INF, 13.1, INF, INF, 18.5, INF, INF}      // GDSM
 };
 
+// Query count matrix - dynamic
+int queryCountMatrix[N][N] = { 0 };
+
 // Traffic matrix (1 = best, 2 = worst) - static
 double trafficMatrix[N][N];
 
 // Weight matrix (distance * traffic) - dynamic
 double weightMatrix[N][N];
+
+// Speed range (km/h) - static
+float speedRange[11][2] = {
+	{1.0, 140.0},
+	{1.1, 126.5},
+	{1.2, 113.0},
+	{1.3, 99.5},
+	{1.4, 86.0},
+	{1.5, 72.5},
+	{1.6, 59.0},
+	{1.7, 45.5},
+	{1.8, 32.0},
+	{1.9, 18.5},
+	{2.0, 5.0}
+};
 
 // Initialise traffic matrix
 void initTrafficMatrix() {
@@ -92,9 +110,23 @@ void initWeightMatrix() {
 
 // Update traffic matrix
 void updateTrafficMatrix(int src, int dst) {
-	if (trafficMatrix[src][dst] < 2.0) {
+	queryCountMatrix[src][dst]++;
+
+	if (queryCountMatrix[src][dst] % 10 == 0 && trafficMatrix[src][dst] < 2.0) {
 		trafficMatrix[src][dst] += 0.1;
 	}
+}
+
+// Print Query Count Matrix
+void printQueryCountMatrix() {
+	printf("Query Count Matrix:\n");
+	for (int i = 0; i < N; i++) {
+		for (int j = 0; j < N; j++) {
+			printf("%d\t", queryCountMatrix[i][j]);
+		}
+		printf("\n");
+	}
+	printf("\n");
 }
 
 // Print Traffic Matrix
@@ -102,12 +134,10 @@ void printTrafficMatrix() {
 	printf("Traffic Matrix:\n");
 	for (int i = 0; i < N; i++) {
 		for (int j = 0; j < N; j++) {
-			if (trafficMatrix[i][j] == INF) {
+			if (trafficMatrix[i][j] == INF)
 				printf("INF\t");
-			}
-			else {
+			else
 				printf("%.1f\t", trafficMatrix[i][j]);
-			}
 		}
 		printf("\n");
 	}
@@ -163,7 +193,6 @@ void printPath(int prev[], int src, int vertex, const char* mallNames[]) {
 	}
 
 	printPath(prev, src, prev[vertex], mallNames);
-
 	printf(" -> %s", mallNames[vertex]);
 }
 
@@ -193,6 +222,7 @@ static void vSenderTask(void* pvParameters) {
 				TickType_t xElapsedTime = xEndTime - xStartTime;
 				printf("\nElapsed time: %u ms\n", (xElapsedTime * portTICK_PERIOD_MS));
 				printTrafficMatrix();
+				printQueryCountMatrix();
 			}
 		}
 		xSemaphoreGive(xSemaphore);
@@ -216,14 +246,12 @@ static void vReceiverTask(void* pvParameters) {
 			queryCount++;
 
 			// Print output
-			printf("User %d\t\t: %s -> %s\n",
+			printf("User %05d\t: %s -> %s\n",
 				queryCount,
 				mallNames[lReceivedValue.src],
 				mallNames[lReceivedValue.dst]);
-
 			printf("Shortest Path\t: ");
 			printPath(prev, lReceivedValue.src, lReceivedValue.dst, mallNames);
-
 			printf("\nDistance\t: %.2f km\n\n",
 				dist[lReceivedValue.dst]);
 
@@ -245,6 +273,8 @@ static void vReceiverTask(void* pvParameters) {
 int main(void) {
 	initTrafficMatrix();
 	initWeightMatrix();
+
+	printTrafficMatrix();
 
 	xSemaphore = xSemaphoreCreateBinary();
 	xSemaphoreGive(xSemaphore);
