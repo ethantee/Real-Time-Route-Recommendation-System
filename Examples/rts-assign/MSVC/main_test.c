@@ -2,6 +2,7 @@
 #include "task.h"
 #include "queue.h"
 #include "supporting_functions.h"
+#include <semphr.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
@@ -11,12 +12,13 @@
 
 #define N 11				// number of malls
 #define INF FLT_MAX			// infinity in distances
-#define MAX_QUERIES 100		// maximum number of user queries
+#define MAX_QUERIES 10000	// maximum number of user queries
 #define MIN_SPEED 5			// minimum speed in km/h
 #define MAX_SPEED 140		// maximum speed in km/h
 
-// Queue handle
+// Queue and semaphore handles
 QueueHandle_t xQueue;
+SemaphoreHandle_t xSemaphore;
 
 // Start time
 volatile TickType_t xStartTime;
@@ -64,9 +66,6 @@ double trafficMatrix[N][N];
 // Weight matrix (distance * traffic) - dynamic
 double weightMatrix[N][N];
 
-// Query matrix (number of users) - dynamic
-int queryMatrix[N][N] = { 0 };
-
 // Initialise traffic matrix
 void initTrafficMatrix() {
 	for (int i = 0; i < N; i++) {
@@ -91,22 +90,29 @@ void initWeightMatrix() {
 	}
 }
 
-//// Print Traffic Matrix
-//void printTrafficMatrix() {
-//	printf("Traffic Matrix:\n");
-//	for (int i = 0; i < N; i++) {
-//		for (int j = 0; j < N; j++) {
-//			if (trafficMatrix[i][j] == INF) {
-//				printf("INF\t");
-//			}
-//			else {
-//				printf("%.1f\t", trafficMatrix[i][j]);
-//			}
-//		}
-//		printf("\n");
-//	}
-//	printf("\n");
-//}
+// Update traffic matrix
+void updateTrafficMatrix(int src, int dst) {
+	if (trafficMatrix[src][dst] < 2.0) {
+		trafficMatrix[src][dst] += 0.1;
+	}
+}
+
+// Print Traffic Matrix
+void printTrafficMatrix() {
+	printf("Traffic Matrix:\n");
+	for (int i = 0; i < N; i++) {
+		for (int j = 0; j < N; j++) {
+			if (trafficMatrix[i][j] == INF) {
+				printf("INF\t");
+			}
+			else {
+				printf("%.1f\t", trafficMatrix[i][j]);
+			}
+		}
+		printf("\n");
+	}
+	printf("\n");
+}
 
 // Dijkstra's Algorithm
 void dijkstra(int src, float dist[], int prev[], float graph[N][N]) {
@@ -169,23 +175,27 @@ static void vSenderTask(void* pvParameters) {
 	xStartTime = xTaskGetTickCount();
 
 	for (unsigned int i = 0; i < MAX_QUERIES; i++) {
-		lValueToSend.src = rand() % N;
-		do {
-			lValueToSend.dst = rand() % N;
-		} while (lValueToSend.src == lValueToSend.dst);
+		if (xSemaphoreTake(xSemaphore, portMAX_DELAY) == pdTRUE) {
+			lValueToSend.src = rand() % N;
+			do {
+				lValueToSend.dst = rand() % N;
+			} while (lValueToSend.src == lValueToSend.dst);
 
-		// Send query to the queue
-		xStatus = xQueueSendToBack(xQueue, &lValueToSend, 0);
+			// Send query to the queue
+			xStatus = xQueueSendToBack(xQueue, &lValueToSend, 100);
 
-		if (xStatus != pdPASS) {
-			vPrintString("Could not send to the queue.\r\n");
+			if (xStatus != pdPASS) {
+				vPrintString("Could not send to the queue.\r\n");
+			}
+
+			if (i == MAX_QUERIES - 1) {
+				TickType_t xEndTime = xTaskGetTickCount();
+				TickType_t xElapsedTime = xEndTime - xStartTime;
+				printf("\nElapsed time: %u ms\n", (xElapsedTime * portTICK_PERIOD_MS));
+				printTrafficMatrix();
+			}
 		}
-
-		if (i == MAX_QUERIES - 1) {
-			TickType_t xEndTime = xTaskGetTickCount();
-			TickType_t xElapsedTime = xEndTime - xStartTime;
-			printf("\nElapsed time: %u ms\n", (xElapsedTime * portTICK_PERIOD_MS));
-		}
+		xSemaphoreGive(xSemaphore);
 	}
 	vTaskDelete(NULL);
 }
@@ -216,6 +226,15 @@ static void vReceiverTask(void* pvParameters) {
 
 			printf("\nDistance\t: %.2f km\n\n",
 				dist[lReceivedValue.dst]);
+
+			// Update traffic matrix
+			xSemaphoreTake(xSemaphore, portMAX_DELAY);
+			int currentVertex = lReceivedValue.dst;
+			while (currentVertex != lReceivedValue.src && prev[currentVertex] != -1) {
+				updateTrafficMatrix(prev[currentVertex], currentVertex);
+				currentVertex = prev[currentVertex];
+			}
+			xSemaphoreGive(xSemaphore);
 		}
 		else {
 			vPrintString("Could not receive from the queue.\r\n");
@@ -224,7 +243,13 @@ static void vReceiverTask(void* pvParameters) {
 }
 
 int main(void) {
-	xQueue = xQueueCreate(1000, sizeof(query_t));
+	initTrafficMatrix();
+	initWeightMatrix();
+
+	xSemaphore = xSemaphoreCreateBinary();
+	xSemaphoreGive(xSemaphore);
+
+	xQueue = xQueueCreate(20, sizeof(query_t));
 
 	if (xQueue != NULL) {
 		xTaskCreate(vSenderTask, "Sender", 1024, NULL, 1, NULL);
