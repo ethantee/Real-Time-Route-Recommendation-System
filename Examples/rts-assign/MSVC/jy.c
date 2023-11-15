@@ -1,150 +1,336 @@
 #include "FreeRTOS.h"
 #include "task.h"
-#include "timers.h"
 #include "queue.h"
-#include "math.h"
+#include "supporting_functions.h"
+#include <semphr.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <math.h>
+#include <float.h>
+#include <stdbool.h>
+#include <time.h>
 
-#include "supporting_functions.h"
+#define N 11				// number of malls
+#define INF FLT_MAX			// infinity in distances
+#define MAX_QUERIES 10	// maximum number of user queries
+#define MIN_SPEED 5			// minimum speed in km/h
+#define MAX_SPEED 140		// maximum speed in km/h
 
-#define N 5
+// Queue and semaphore handles
+QueueHandle_t xQueue;
+SemaphoreHandle_t xSemaphore;
 
-// Enumerate shopping malls in adjacency matrix
-enum Malls {
-    AMTM, APBJ, AKSM, BSC, BTS
+// Start time
+volatile TickType_t xStartTime;
+
+// User query structure
+typedef struct {
+	int src;
+	int dst;
+	int usp;
+} query_t;
+
+// Mall structure
+typedef struct {
+	int vertex;
+	float dist;
+	int prev;
+} mall_t;
+
+// 
+typedef struct {
+	int pathCount;
+	double accumulatedSpeed;
+	double averageSpeed;
+} speed_t;
+
+// Declare arrays for user queries and malls
+query_t user_query[MAX_QUERIES];
+mall_t malls[N];
+
+// Mall names
+const char* mallNames[N] = {
+	"AMTM", "APBJ", "AKSM", "BSC", "BTS", "BMSC", "BBP", "DCM", "EP", "F88", "GDSM"
 };
 
-// Array of mall names corresponding to their enumeration
-const char *mallNames[] = {"AMTM", "APBJ", "AKSM", "BSC", "BTS"};
-
-// Connection adjacency matrix between shopping malls; value = {-1, 1} - static
-int connectionMatrix[N][N] = {
-  {-1, 1, 1, 1, 1},     // AMTM
-  {1, -1, 1, 1, 1},     // APBJ
-  {1, 1, -1, 1, -1},    // AKSM
-  {1, 1, -1, -1, -1},   // BSC
-  {1, -1, -1, 1, -1},   // BTS
+// Distance matrix (in km, INF = not connected) - static
+float distanceMatrix[N][N] = {
+	{INF, 14.5, 7.6, 13, 4, 15.2, INF, INF, 14.8, 5.4, 17.7},       // AMTM
+	{14.6, INF, 17.4, 13.6, 14.4, 26.1, INF, INF, 5.3, INF, 14.5},  // APBJ
+	{7.3, 22.1, INF, 9.6, INF, 10.9, INF, INF, 15.2, INF, 16.4},    // AKSM
+	{11.2, 13.1, INF, INF, INF, 9.9, INF, 1.7, 16.4, INF, 5.5},     // BSC
+	{3.4, INF, INF, 9.1, INF, 13, INF, INF, 12.5, INF, 15.9},       // BTS
+	{17.4, 22.8, INF, 11.1, INF, INF, INF, INF, 22.7, INF, 12.2},   // BMSC
+	{INF, INF, INF, 8, INF, 10.5, INF, INF, 12.6, INF, 12.7},       // BBP
+	{11.5, 16.9, INF, INF, 8.5, 9.4, 9.3, INF, 18.4, INF, 6.2},     // DCM
+	{11.5, 4, 14.9, 14.8, 11.9, 20.7, INF, INF, INF, INF, 16.7},    // EP
+	{INF, INF, INF, INF, 0.85, INF, INF, INF, 13.3, INF, INF},      // F88
+	{16.2, 17.3, 14, 6.6, INF, 13.1, INF, INF, 18.5, INF, INF}      // GDSM
 };
 
-// Distance adjacency matrix between shopping malls; value = {distances, -1} - static
-double distanceMatrix[N][N] = {
-  {-1.0, 14.5, 7.6, 13.0, 4.0},     // AMTM
-  {14.6, -1.0, 17.4, 13.6, 14.4},   // APBJ
-  {7.3, 22.1, -1.0, 9.6, -1.0},     // AKSM
-  {11.2, 13.1, -1.0, -1.0, -1.0},   // BSC
-  {3.4, -1.0, -1.0, 9.1, -1.0},     // BTS
-};
-
-// Traffic condition adjacency matrix between shopping malls; value = {1 < x < 5, -1} - dynamic
+// Traffic matrix (1 = best, 2 = worst) - static
 double trafficMatrix[N][N];
 
-// Edges weight adjacency matix between shopping malls; - dynamic
-// Weight values = distance * traffic condition
+// Weight matrix (distance * traffic) - dynamic
 double weightMatrix[N][N];
 
-// Function to initialize traffic condition adjacency matrix with 1s and -1s
-void initializeTrafficConditions() {
-    for (int i = 0; i < N; ++i) {
-        for (int j = 0; j < N; ++j) {
-            if (connectionMatrix[i][j] == 1) {
-                trafficMatrix[i][j] = connectionMatrix[i][j];  // Initial value
-            }
-            else {
-                trafficMatrix[i][j] = -1.0;  // No connection
-            }
-        }
-    }
+// Average speed adjacency matrix - dynamic
+speed_t avgSpeedMatrix[N][N];
+
+// Average travelling time adjacency matrix - dynamic
+double avgTravelTimeMatrix[N][N];
+
+// Initialise traffic matrix
+void initTrafficMatrix() {
+	for (int i = 0; i < N; i++) {
+		for (int j = 0; j < N; j++) {
+			if (distanceMatrix[i][j] != INF)
+				trafficMatrix[i][j] = 1.0;
+			else
+				trafficMatrix[i][j] = INF;
+		}
+	}
 }
 
-// Function to initialize weight condition adjacency matrix with distance values and -1s
-void initializeWeightConditions() {
-    for (int i = 0; i < N; ++i) {
-        for (int j = 0; j < N; ++j) {
-            if (connectionMatrix[i][j] == 1) {
-                weightMatrix[i][j] = distanceMatrix[i][j];  // Initial value
-            }
-            else {
-                weightMatrix[i][j] = -1.0;  // No connection
-            }
-        }
-    }
+// Initialise weight matrix
+void initWeightMatrix() {
+	for (int i = 0; i < N; i++) {
+		for (int j = 0; j < N; j++) {
+			if (distanceMatrix[i][j] != INF)
+				weightMatrix[i][j] = distanceMatrix[i][j];
+			else
+				weightMatrix[i][j] = INF;
+		}
+	}
 }
 
-// Function to update Traffic Condition Matrix when a user queries a path
-void updateTrafficMatrix(int source, int destination) {
-    if (connectionMatrix[source][destination] == 1) {
-        // Check if traffic value has reached the maximum value of 5
-        if (trafficMatrix[source][destination] < 5.0) {
-            // Increment the traffic condition value by 1
-            trafficMatrix[source][destination] += 1.0;
-        } 
-        // If traffic value is already at 5, do nothing (i.e., it stays at 5)
-    }
-    else {
-        // Handle the case where there's no direct path between source and destination
-        printf("No direct path between the selected malls.\n");
-    }
+// Update traffic matrix
+void updateTrafficMatrix(int src, int dst) {
+	avgSpeedMatrix[src][dst].pathCount++;
+
+	if (avgSpeedMatrix[src][dst].pathCount % 10 == 0 && trafficMatrix[src][dst] < 2.0) {
+		trafficMatrix[src][dst] += 0.1;
+	}
 }
 
-// Function to update weightMatrix based on trafficMatrix and distanceMatrix
-void updateWeightMatrix() {
-    for (int i = 0; i < N; ++i) {
-        for (int j = 0; j < N; ++j) {
-            if (trafficMatrix[i][j] != -1.0 && distanceMatrix[i][j] != -1.0) {
-                weightMatrix[i][j] = trafficMatrix[i][j] * distanceMatrix[i][j];
-            }
-            else {
-                weightMatrix[i][j] = -1.0;  // No connection or invalid distance
-            }
-        }
-    }
+// Print Traffic Matrix
+void printTrafficMatrix() {
+	printf("Traffic Matrix:\n");
+	for (int i = 0; i < N; i++) {
+		for (int j = 0; j < N; j++) {
+			if (trafficMatrix[i][j] == INF) {
+				printf("INF\t");
+			}
+			else {
+				printf("%.1f\t", trafficMatrix[i][j]);
+			}
+		}
+		printf("\n");
+	}
+	printf("\n");
 }
 
-int main() {
-    // Seed the random number generator
-    srand(time(0));
+// Print Query Count
+void printPathCount() {
+	printf("Path Count Matrix:\n");
+	for (int i = 0; i < N; i++) {
+		for (int j = 0; j < N; j++) {
+			printf("%d\t", avgSpeedMatrix[i][j].pathCount);
+		}
+		printf("\n");
+	}
+	printf("\n");
+}
 
-    // Initialize the traffic conditions - TESTING
-    initializeTrafficConditions();
+// Print Accumulated Speed
+void printAccSpeed() {
+	printf("Accumulated Speed Matrix:\n");
+	for (int i = 0; i < N; i++) {
+		for (int j = 0; j < N; j++) {
+			printf("%.2f\t", avgSpeedMatrix[i][j].accumulatedSpeed);
+		}
+		printf("\n");
+	}
+	printf("\n");
+}
 
-    // Simulate 5 users querying for routes
-    for (int i = 0; i < 5; ++i) {
-        int source = rand() % N;
-        int destination;
-        do {
-            destination = rand() % N;
-        } while (source == destination); // Ensure source and destination are not the same
+// Print Average Speed
+void printAvgSpeed() {
+	printf("Average Speed Matrix:\n");
+	for (int i = 0; i < N; i++) {
+		for (int j = 0; j < N; j++) {
+			printf("%.2f\t", avgSpeedMatrix[i][j].averageSpeed);
+		}
+		printf("\n");
+	}
+	printf("\n");
+}
 
-        // Generate a random speed for the user in km/h, e.g., between 20 and 100
-        int speed = rand() % 81 + 20;  // This will generate a random number between 20 and 100
+// Dijkstra's Algorithm
+void dijkstra(int src, float dist[], int prev[], float graph[N][N]) {
+	bool visited[N];
 
-        printf("User %d is querying from %s to %s at a speed of %d km/h\n", i + 1, mallNames[source], mallNames[destination], speed);
-        updateTrafficMatrix(source, destination); // Increment traffic condition
-    }
+	for (int i = 0; i < N; i++) {
+		dist[i] = INF;
+		prev[i] = -1;
+		visited[i] = false;
+	}
 
-    // Print Adjacency Matrix - TESTING 
-    printf("\n Traffic condition matrix \n");
-    for(int i = 0; i < N; ++i) {
-        // Loop through columns
-        for (int j = 0; j < N; ++j) {
-            printf("%6.2f ", trafficMatrix[i][j]);  // Print each element with a space
-        }
-        printf("\n");  // Move to the next line after each row
-    }
+	dist[src] = 0;
 
-    // Initialize and update the weight matrix - TESTING
-    initializeWeightConditions();
-    updateWeightMatrix();
+	// Find shortest path for all vertices
+	for (int count = 0; count < N - 1; count++) {
+		int u = -1;
+		float minDist = INF;
 
-    // Print Weight Matrix - TESTING
-    printf("\n Weight matrix \n");
-    for (int i = 0; i < N; ++i) {
-        for (int j = 0; j < N; ++j) {
-            printf("%6.2f ", weightMatrix[i][j]);  // Print each element with a space
-        }
-        printf("\n");  // Move to the next line after each row
-    }
+		for (int v = 0; v < N; v++) {
+			if (!visited[v] && dist[v] <= minDist) {
+				minDist = dist[v];
+				u = v;
+			}
+		}
 
-    return 0;
+		// Mark the picked vertex as visited
+		visited[u] = true;
+
+		// Update dist value of the adjacent vertices of the picked vertex
+		for (int v = 0; v < N; v++) {
+			if (!visited[v] && graph[u][v] != INF && dist[u] + graph[u][v] < dist[v]) {
+				prev[v] = u;
+				dist[v] = dist[u] + graph[u][v];
+			}
+		}
+	}
+}
+
+void printPath(int prev[], int src, int vertex, const char* mallNames[]) {
+	if (vertex == src) {
+		printf("%s", mallNames[vertex]);
+		return;
+	}
+
+	if (prev[vertex] == -1) {
+		printf("No path exists");
+		return;
+	}
+
+	printPath(prev, src, prev[vertex], mallNames);
+	printf(" -> %s", mallNames[vertex]);
+}
+
+// Function to generate a random speed for each user query
+int generateRandomSpeed() {
+	return MIN_SPEED + (rand() % (MAX_SPEED - MIN_SPEED + 1));
+}
+
+static void vSenderTask(void* pvParameters) {
+	srand((unsigned)time(NULL));
+	query_t lValueToSend;
+	BaseType_t xStatus;
+	unsigned int queryCount = 1;
+
+	xStartTime = xTaskGetTickCount();
+
+	for (unsigned int i = 0; i < MAX_QUERIES; i++) {
+		lValueToSend.src = rand() % N;
+
+		do {
+			lValueToSend.dst = rand() % N;
+		} while (lValueToSend.src == lValueToSend.dst);
+
+		int speed = generateRandomSpeed();
+		lValueToSend.usp = speed;
+
+		// Print generated query first
+		printf("User %d\t\t: %s -> %s\nSpeed\t\t: %d km/h\n",
+			queryCount++,
+			mallNames[lValueToSend.src],
+			mallNames[lValueToSend.dst],
+			lValueToSend.usp);
+
+		// Send query to the queue
+		xStatus = xQueueSendToBack(xQueue, &lValueToSend, 100);
+
+		if (xStatus != pdPASS) {
+			vPrintString("Could not send to the queue.\r\n");
+		}
+
+		//vTaskDelay(pdMS_TO_TICKS(100));  // Short delay to allow receiver task to process
+	}
+
+	TickType_t xEndTime = xTaskGetTickCount();
+	TickType_t xElapsedTime = xEndTime - xStartTime;
+	printf("\nElapsed time: %u ms\n", (xElapsedTime * portTICK_PERIOD_MS));
+	printTrafficMatrix();
+	printPathCount();
+	printAccSpeed();
+	printAvgSpeed();
+
+	vTaskDelete(NULL);
+}
+
+// Function to receive user queries
+static void vReceiverTask(void* pvParameters) {
+	query_t lReceivedValue;
+	BaseType_t xStatus;
+	float dist[N];
+	int prev[N];
+
+	while (true) {
+		xStatus = xQueueReceive(xQueue, &lReceivedValue, portMAX_DELAY);
+
+		if (xStatus == pdPASS) {
+			dijkstra(lReceivedValue.src, dist, prev, distanceMatrix);
+
+			// Print path and distance after processing
+			printf("Shortest Path\t: ");
+			printPath(prev, lReceivedValue.src, lReceivedValue.dst, mallNames);
+			printf("\nDistance\t: %.2f km\n\n", dist[lReceivedValue.dst]);
+
+			xSemaphoreTake(xSemaphore, portMAX_DELAY);
+			int currentVertex = lReceivedValue.dst;
+			while (currentVertex != lReceivedValue.src && prev[currentVertex] != -1) {
+				updateTrafficMatrix(prev[currentVertex], currentVertex);
+				avgSpeedMatrix[prev[currentVertex]][currentVertex].accumulatedSpeed += lReceivedValue.usp;
+				if (avgSpeedMatrix[prev[currentVertex]][currentVertex].pathCount > 0) {
+					avgSpeedMatrix[prev[currentVertex]][currentVertex].averageSpeed =
+						avgSpeedMatrix[prev[currentVertex]][currentVertex].accumulatedSpeed /
+						avgSpeedMatrix[prev[currentVertex]][currentVertex].pathCount;
+				}
+				currentVertex = prev[currentVertex];
+			}
+			xSemaphoreGive(xSemaphore);
+
+			printPathCount();
+			printAccSpeed();
+			printAvgSpeed();
+		}
+		else {
+			vPrintString("Could not receive from the queue.\r\n");
+		}
+	}
+}
+
+int main(void) {
+	initTrafficMatrix();
+	initWeightMatrix();
+
+	xSemaphore = xSemaphoreCreateBinary();
+	xSemaphoreGive(xSemaphore); 
+
+	xQueue = xQueueCreate(20, sizeof(query_t));
+
+	if (xQueue != NULL) {
+		xTaskCreate(vSenderTask, "Sender", 1024, NULL, 1, NULL);
+		xTaskCreate(vReceiverTask, "Receiver", 1024, NULL, 2, NULL);
+
+		vTaskStartScheduler();
+	}
+	else {
+		// Queue was not created
+	}
+
+	for (;; );
+
+	return 0;
 }
