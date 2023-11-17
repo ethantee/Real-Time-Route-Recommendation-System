@@ -8,7 +8,7 @@ with open('C:\\Users\\ethan\\OneDrive - Asia Pacific University\\Desktop\\Real-T
 
  
 # Initialize Google Maps client
-gmaps = googlemaps.Client(key='AIzaSyAyY0w10whfoDAUdq7vRTPxOlhH_UJGyek')
+gmaps = googlemaps.Client(key='API_KEY')
  
 def get_distance(mall1, mall2):
     """Get the distance between two malls using Google Maps API."""
