@@ -86,7 +86,7 @@
     <ClCompile Include="..\..\..\FreeRTOS_Source\tasks.c" />
     <ClCompile Include="..\..\..\FreeRTOS_Source\timers.c" />
     <ClCompile Include="..\..\..\Supporting_Functions\supporting_functions.c" />
-    <ClCompile Include="jy.c" />
+    <ClCompile Include="draft.c" />
     <ClCompile Include="main_test.c" />
     <ClCompile Include="test.c" />
   </ItemGroup>
