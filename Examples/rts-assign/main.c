@@ -12,7 +12,7 @@
 
 #define N 44						// Number of malls
 #define INF FLT_MAX					// Infinity to represent no direct path
-#define MAX_QUERIES 3000			// Number of user quiries
+#define MAX_QUERIES 50000			// Number of user quiries
 #define SRC_NODE rand() % N			// Randomize source node
 #define DST_NODE rand() % N			// Randomize destination node
 #define MOTORIST_BATCH_SIZE 5000	// Number of motorists in one batch
@@ -645,7 +645,7 @@ static void vPathCalculationTask(void* pvParameters) {
 
 			i++;
 
-			if (sel == 1 || sel == 4 || sel == 7) {
+			if (sel == 1 || 4 || 7) {
 
 				// Calculate ETA
 				float totalETA = 0.0;
@@ -686,7 +686,7 @@ static void vPathCalculationTask(void* pvParameters) {
 				// Release the token (mutex) 
 				xSemaphoreGive(xMutex);
 			}
-			else if (sel == 2 || sel == 5 || sel == 8) {
+			else if (sel == 2 || 5 || 8) {
 				// Calculate and print ETA
 				float totalETA = 0.0;
 				int currentVertex = lReceivedValue.dstNode;
@@ -754,7 +754,7 @@ static void vPathCalculationTask(void* pvParameters) {
 					vTaskEndScheduler();
 				}
 			}
-			else if (sel == 3 || sel == 6 || sel == 9) {
+			else if (sel == 3 || 6 || 9) {
 				// Print generated query and user speed
 				printf("User %d\t: %s -> %s\n",
 					i,
@@ -1018,10 +1018,10 @@ static void vUpdateMatricesTask(void* pvParameters) {
 					uptAvgTrvTimeMatrix(src, dst);
 				}
 
-				if (sel == 1 || sel == 2) {
+				if (sel == 1 || 2 || 4 || 5 || 7 || 8) {
 					vPrintString(printUpdate);
 				}
-				else if (sel == 3) {
+				else if (sel == 3 || 6 || 9) {
 					printTrafficMatrix();
 					printPathCount();
 					printAccSpeed();
@@ -1109,7 +1109,7 @@ int main(void) {
 		xTaskCreate(vUpdateMatricesTask,
 			"Matrices Update Task",
 			1024,
-			"======================== UPDATE TRAFFIC DATA ========================\n",
+			"=================================== UPDATE TRAFFIC DATA ======================================\n",
 			3,
 			&xUpdateMatricesTaskHandle);
 
