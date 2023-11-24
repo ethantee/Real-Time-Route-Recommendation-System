@@ -15,7 +15,7 @@
     <Keyword>Win32Proj</Keyword>
     <RootNamespace>
     </RootNamespace>
-    <ProjectName>real-time-route-recommendation</ProjectName>
+    <ProjectName>Real-Time Route Recommendation</ProjectName>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
@@ -86,8 +86,7 @@
     <ClCompile Include="..\..\..\FreeRTOS_Source\tasks.c" />
     <ClCompile Include="..\..\..\FreeRTOS_Source\timers.c" />
     <ClCompile Include="..\..\..\Supporting_Functions\supporting_functions.c" />
-    <ClCompile Include="draft.c" />
-    <ClCompile Include="main_test.c" />
+    <ClCompile Include="..\main.c" />
     <ClCompile Include="test.c" />
   </ItemGroup>
   <ItemGroup>
