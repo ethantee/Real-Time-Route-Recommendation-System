@@ -88,6 +88,7 @@
     <ClCompile Include="..\..\..\Supporting_Functions\supporting_functions.c" />
     <ClCompile Include="..\main.c" />
     <ClCompile Include="test.c" />
+    <ClCompile Include="optimizing.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\..\FreeRTOS_Source\include\event_groups.h" />

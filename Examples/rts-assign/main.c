@@ -12,7 +12,7 @@
 
 #define N 44						// Number of malls
 #define INF FLT_MAX					// Infinity to represent no direct path
-#define MAX_QUERIES 50000			// Number of user quiries
+#define MAX_QUERIES 1000000			// Number of user queries
 #define SRC_NODE rand() % N			// Randomize source node
 #define DST_NODE rand() % N			// Randomize destination node
 #define MOTORIST_BATCH_SIZE 5000	// Number of motorists in one batch
@@ -20,7 +20,7 @@
 #define MAX_TRFCONDITION 10			// Maximum traffic congestion index
 
 // User selection
-int32_t sel = 0;
+uint8_t sel = 0;
 
 // Queue management
 QueueHandle_t queryQueue = NULL;
@@ -32,8 +32,8 @@ SemaphoreHandle_t xMutex = NULL;
 // Timing management
 volatile TickType_t xStartTime = 0;
 volatile TickType_t xProgramStartTime = 0;
-TickType_t queryStartTimes[MAX_QUERIES] = { 0 };
-TickType_t queryEndTimes[MAX_QUERIES] = { 0 };
+volatile TickType_t queryStartTimes[MAX_QUERIES] = { 0 };
+volatile TickType_t queryEndTimes[MAX_QUERIES] = { 0 };
 
 // Notification management
 TaskHandle_t xMotoristDataTaskHandle = NULL;
@@ -49,7 +49,7 @@ typedef struct {
 typedef struct {
 	int32_t srcNode;	// Source node
 	int32_t dstNode;	// Distance node
-	double_t mtSpeed; // Motorist speed
+	double_t mtSpeed;		// Motorist speed
 } motorist_t;
 
 // Motorist batch struct
@@ -64,14 +64,14 @@ typedef struct {
 
 // Average speed matrix's struct data
 typedef struct {
-	double pathCount;	// Number of motorist 
+	double pathCount;	// Number of motorist
 	double accSpeed;	// Accumulated speed of motorist
-	double avgSpeed;	// Average speed (Accumulated Speed / Number of motorist)
+	double avgSpeed;	// Average speed (Accumulated Speed / Number of Motorist)
 } speedRoute_t;
 
 // Average time matrix's struct data
 typedef struct {
-	double avgTrvTime;	// Average travelling time (Distance / Average Speed)
+	double avgTrvTime;	// Average traveling time (Distance / Average Speed)
 } timeRoute_t;
 
 // Mall names
@@ -141,8 +141,9 @@ timeRoute_t avgTimeMatrix[N][N];
 
 // Randomize traffic condition {Congestion index: 0 <= x <= 10} [trafficMatrix]
 void randTrafficMatrix() {
-	for (int i = 0; i < N; i++) {
-		for (int j = 0; j < N; j++) {
+	srand((unsigned)time(NULL));
+	for (uint8_t i = 0; i < N; i++) {
+		for (uint8_t j = 0; j < N; j++) {
 			if (distanceMatrix[i][j] != INF) {
 				// Generate random congestion index between 0 to 10
 				trafficMatrix[i][j].trfCondition = MIN_TRFCONDITION + rand() % (MAX_TRFCONDITION - MIN_TRFCONDITION + 1);
@@ -157,8 +158,8 @@ void randTrafficMatrix() {
 
 // Initialize and randomize average speed matrix based on the traffic condition [avgSpeedMatrix]
 void initAverageSpeedMatrix() {
-	for (int i = 0; i < N; i++) {
-		for (int j = 0; j < N; j++) {
+	for (uint8_t i = 0; i < N; i++) {
+		for (uint8_t j = 0; j < N; j++) {
 			if (distanceMatrix[i][j] != INF) {
 				// Retrieve the current traffic condition
 				double trfCondition = trafficMatrix[i][j].trfCondition;
@@ -166,22 +167,29 @@ void initAverageSpeedMatrix() {
 				// Generate a random speed within the range of the traffic condition 
 				int maxSpeed = 0;
 				int minSpeed = 0;
-				if (trfCondition == 0.0) {  // Speed range: 80 <= x <= 150 (Acceptable speed)
+
+				// Speed range: 80 <= x <= 150 (Acceptable speed)
+				if (trfCondition == 0) {
 					maxSpeed = 150;
 					minSpeed = 80;
 				}
-				else if (trfCondition > 0.0 && trfCondition <= 5.0) { // Speed range: 51 <= x <= 79
+				// Speed range: 51 <= x <= 79
+				else if (trfCondition > 0 && trfCondition <= 5) {
 					maxSpeed = 79;
 					minSpeed = 51;
 				}
-				else if (trfCondition > 5.0 && trfCondition < 10.0) { // Speed range: 21 <= x <= 50
+				// Speed range: 21 <= x <= 50
+				else if (trfCondition > 5 && trfCondition < 10) {
 					maxSpeed = 50;
 					minSpeed = 21;
 				}
-				else if (trfCondition == 10.0) { // Speed range: 8 <= x <= 20 (Congestion speed)
+				// Speed range: 8 <= x <= 20 (Congestion speed)
+				else if (trfCondition == 10) {
 					maxSpeed = 20;
 					minSpeed = 8;
 				}
+
+				// Generate random speed within the range
 				avgSpeedMatrix[i][j].avgSpeed = minSpeed + (rand() % (maxSpeed - minSpeed + 1));
 
 				// Initialize the number of motorist and accumulated speed
@@ -198,12 +206,12 @@ void initAverageSpeedMatrix() {
 	}
 }
 
-// Initialize average travelling time matrix [avgTimeMatrix]
+// Initialize average traveling time matrix [avgTimeMatrix]
 void initAverageTrvTimeMatrix() {
-	for (int i = 0; i < N; i++) {
-		for (int j = 0; j < N; j++) {
+	for (uint8_t i = 0; i < N; i++) {
+		for (uint8_t j = 0; j < N; j++) {
 			if (distanceMatrix[i][j] != INF) {
-				// Average travelling time (in minutes) = (distance / average speed) x 60 
+				// Average traveling time (minutes) = (Distance / Average Speed) * 60 
 				avgTimeMatrix[i][j].avgTrvTime = (distanceMatrix[i][j] / avgSpeedMatrix[i][j].avgSpeed) * 60;
 			}
 			else {
@@ -242,8 +250,7 @@ float totalDistCalculation(int prev[], int src, int vertex) {
 	return distanceMatrix[prev[vertex]][vertex] + totalDistCalculation(prev, src, prev[vertex]);
 }
 
-
-// ************************* Dijkstra's (Standard) Main Function *************************
+// ****************************** Dijkstra's (Standard) Main Function ******************************
 void dijkstra(int src, float dist[], int prev[], timeRoute_t graph[N][N]) {
 	bool visited[N];
 
@@ -268,6 +275,7 @@ void dijkstra(int src, float dist[], int prev[], timeRoute_t graph[N][N]) {
 		}
 
 		// Mark the picked vertex as visited
+		if (u == -1) break;
 		visited[u] = true;
 
 		// Update dist value of the adjacent vertices of the picked vertex
@@ -280,10 +288,10 @@ void dijkstra(int src, float dist[], int prev[], timeRoute_t graph[N][N]) {
 	}
 }
 
-// *************** Function Declarations & Structures Related to MinHeap ***************
+// ********************* Function Declarations & Structures Related to MinHeap *********************
 // Heap node structure
 typedef struct HeapNode {
-	int vertex;         // Vertex number
+	int vertex;			// Vertex number
 	float distance;     // Distance from source
 	int heapIndex;      // Index in the heap array
 } HeapNode;
@@ -296,6 +304,7 @@ typedef struct {
 	HeapNode** array;	// Array of pointers to heap nodes
 } MinHeap;
 
+// ******** Function Declarations & Structures Related to Dijkstra's (With Priority Queue) ********
 // Function to create a new min heap node
 HeapNode* newHeapNode(int v, float dist) {
 	HeapNode* heapNode = (HeapNode*)malloc(sizeof(HeapNode)); // Allocate memory for heap node
@@ -449,9 +458,10 @@ void dijkstraPQ(int src, float dist[], int prev[], timeRoute_t graph[N][N]) {
 			}
 		}
 	}
+	freeMinHeap(minHeap);
 }
 
-// ******************* Function Declarations & Structures Related to A* *******************
+// *********************** Function Declarations & Structures Related to A* ***********************
 // A* node structure
 typedef struct {
 	int vertex;
@@ -463,14 +473,13 @@ typedef struct {
 
 // Heuristic function - Euclidean distance
 float heuristic(int src, int dst) {
-	float x1 = src % N;   // Get the x-coordinate (column) of the source
-	float y1 = src / N;   // Get the y-coordinate (row) of the source
-	float x2 = dst % N;   // Get the x-coordinate (column) of the destination
-	float y2 = dst / N;   // Get the y-coordinate (row) of the destination
+	float x1 = src % N;	// Get the x-coordinate (column) of the source
+	float y1 = src / N;	// Get the y-coordinate (row) of the source
+	float x2 = dst % N; // Get the x-coordinate (column) of the destination
+	float y2 = dst / N; // Get the y-coordinate (row) of the destination
 
 	return sqrt(pow(x2 - x1, 2) + pow(y2 - y1, 2));
 }
-
 
 // Update fCost in the minHeap
 void updateFcost(MinHeap* minHeap, int vertex, float gCost, float hCost) {
@@ -489,7 +498,7 @@ void updateFcost(MinHeap* minHeap, int vertex, float gCost, float hCost) {
 	}
 }
 
-// *********************************** A* Main Function ***********************************
+// *************************************** A* Main Function ***************************************
 // A* Algorithm Function
 void aStar(int src, int dst, float dist[], int prev[], timeRoute_t graph[N][N]) {
 	MinHeap* minHeap = createMinHeap(N);
@@ -528,7 +537,6 @@ void aStar(int src, int dst, float dist[], int prev[], timeRoute_t graph[N][N]) 
 			}
 		}
 	}
-
 	freeMinHeap(minHeap);
 }
 
@@ -539,7 +547,7 @@ static void vUserQueryTask(void* pvParameters) {
 	BaseType_t xStatus;
 
 	// Randomize user query's source and destination
-	for (unsigned int i = 0; i < MAX_QUERIES; i++) {
+	for (uint16_t i = 0; i < MAX_QUERIES; i++) {
 
 		// Generate from randomized source to randomized destination
 		if (sel == 2 || sel == 5 || sel == 8) {
@@ -571,15 +579,15 @@ static void vUserQueryTask(void* pvParameters) {
 static void vPathCalculationTask(void* pvParameters) {
 	query_t	lReceivedValue;
 	BaseType_t xStatus;
-	float dist[N];
-	int prev[N]; //precedessor array which stores the precedessor vertex
 	unsigned int i = 0;
+	float dist[N];
+	int prev[N];
 
 	// Variables to hold timing information for each batch
 	TickType_t batchStartTime = xTaskGetTickCount();
 	TickType_t batchTotalTime = 0;
-	float batchMinTime = FLT_MAX;
-	float batchMaxTime = 0.0;
+	double batchMinTime = FLT_MAX;
+	double batchMaxTime = 0.0;
 
 	while (true) {
 		xStatus = xQueueReceive(queryQueue, &lReceivedValue, portMAX_DELAY);
@@ -587,35 +595,17 @@ static void vPathCalculationTask(void* pvParameters) {
 		if (xStatus == pdPASS) {
 			// Take the mutex before perform the operations
 			if (xSemaphoreTake(xMutex, portMAX_DELAY) == pdTRUE) {
-				if (sel == 1) {
+				if (sel == 1 || sel == 2 || sel == 3) {
+					// Dijkstra's (Standard)
 					dijkstra(lReceivedValue.srcNode, dist, prev, avgTimeMatrix);
 				}
-				else if (sel == 2) {
-					dijkstra(lReceivedValue.srcNode, dist, prev, avgTimeMatrix);
-				}
-				else if (sel == 3) {
-					dijkstra(lReceivedValue.srcNode, dist, prev, avgTimeMatrix);
-				}
-				else if (sel == 4) {
+				else if (sel == 4 || sel == 5 || sel == 6) {
+					// Dijkstra's (With Priority Queue)
 					dijkstraPQ(lReceivedValue.srcNode, dist, prev, avgTimeMatrix);
 				}
-				else if (sel == 5) {
-					dijkstraPQ(lReceivedValue.srcNode, dist, prev, avgTimeMatrix);
-				}
-				else if (sel == 6) {
-					dijkstraPQ(lReceivedValue.srcNode, dist, prev, avgTimeMatrix);
-				}
-				else if (sel == 7) {
+				else if (sel == 7 || sel == 8 || sel == 9) {
+					// A*
 					aStar(lReceivedValue.srcNode, lReceivedValue.dstNode, dist, prev, avgTimeMatrix);
-				}
-				else if (sel == 8) {
-					aStar(lReceivedValue.srcNode, lReceivedValue.dstNode, dist, prev, avgTimeMatrix);
-				}
-				else if (sel == 9) {
-					aStar(lReceivedValue.srcNode, lReceivedValue.dstNode, dist, prev, avgTimeMatrix);
-				}
-				else {
-					vTaskEndScheduler();
 				}
 			}
 
@@ -627,13 +617,13 @@ static void vPathCalculationTask(void* pvParameters) {
 			// Calculate total elapsed time
 			TickType_t xProgramEndTime = xTaskGetTickCount();
 			TickType_t xTotalElapsedTime = xProgramEndTime - xProgramStartTime;
-			float_t xTotalElapsedTimeInMs = (float)xTotalElapsedTime * portTICK_PERIOD_MS;
+			double xTotalElapsedTimeInMs = (double)xTotalElapsedTime * portTICK_PERIOD_MS;
 
 			// Calculate average elapsed time
-			float_t xAvgElapsedTime = xTotalElapsedTimeInMs / MAX_QUERIES;
+			double xAvgElapsedTime = xTotalElapsedTimeInMs / MAX_QUERIES;
 
 			// Convert ticks to milliseconds for min and max times
-			float queryDurationInMs = (float)queryElapsedTime * portTICK_PERIOD_MS;
+			double queryDurationInMs = (double)queryElapsedTime * portTICK_PERIOD_MS;
 
 			// Update min and max times
 			if (queryDurationInMs < batchMinTime) {
@@ -645,20 +635,11 @@ static void vPathCalculationTask(void* pvParameters) {
 
 			i++;
 
-			if (sel == 1 || 4 || 7) {
-
-				// Calculate ETA
-				float totalETA = 0.0;
-				int currentVertex = lReceivedValue.dstNode;
-				while (currentVertex != lReceivedValue.srcNode && prev[currentVertex] != -1) {
-					totalETA += avgTimeMatrix[prev[currentVertex]][currentVertex].avgTrvTime;
-					currentVertex = prev[currentVertex];
-				}
-
+			if (sel == 1 || sel == 4 || sel == 7) {
 				// Check if a new batch of 1000 queries is completed or the end is reached
 				if (i % 1000 == 0 || i == MAX_QUERIES) {
 					// Calculate cumulative average time
-					float xAvgElapsedTime = (xTotalElapsedTimeInMs / (float)i) * portTICK_PERIOD_MS;
+					double xAvgElapsedTime = (xTotalElapsedTimeInMs / (double)i) * portTICK_PERIOD_MS;
 
 					if (i == 1000) {
 						// Print all the elapsed times
@@ -682,24 +663,21 @@ static void vPathCalculationTask(void* pvParameters) {
 						vTaskEndScheduler();
 					}
 				}
-
-				// Release the token (mutex) 
+				// Release the token (mutex)
 				xSemaphoreGive(xMutex);
 			}
-			else if (sel == 2 || 5 || 8) {
+			else if (sel == 2 || sel == 5 || sel == 8) {
 				// Calculate and print ETA
 				float totalETA = 0.0;
 				int currentVertex = lReceivedValue.dstNode;
+
 				while (currentVertex != lReceivedValue.srcNode && prev[currentVertex] != -1) {
 					totalETA += avgTimeMatrix[prev[currentVertex]][currentVertex].avgTrvTime;
 					currentVertex = prev[currentVertex];
 				}
 
-				// Release the token (mutex) 
-				xSemaphoreGive(xMutex);
-
 				if (i % 1000 == 0) {
-					// Print the checking progress in percentage
+					// Print the checking progress
 					printf("Checking Progress: %.2f%%\n", (float)i / MAX_QUERIES * 100);
 				}
 
@@ -719,10 +697,8 @@ static void vPathCalculationTask(void* pvParameters) {
 					if (distanceMatrix[lReceivedValue.srcNode][lReceivedValue.dstNode] != INF) {
 						printf("%s -> %s\n", mallNames[lReceivedValue.srcNode], mallNames[lReceivedValue.dstNode]);
 
-						// Print the total distance for the direct path
+						// Print the total distance and ETA for the direct path
 						printf("Total Distance\t\t: %.2f km\n", distanceMatrix[lReceivedValue.srcNode][lReceivedValue.dstNode]);
-
-						// Print the ETA for the direct path
 						printf("ETA\t\t\t: %.2f minute[s]\n", avgTimeMatrix[lReceivedValue.srcNode][lReceivedValue.dstNode].avgTrvTime);
 
 						vPrintString("---------------------------------------------------------\n");
@@ -730,10 +706,8 @@ static void vPathCalculationTask(void* pvParameters) {
 					else {
 						printf("%s -> %s\n", mallNames[lReceivedValue.srcNode], mallNames[lReceivedValue.dstNode]);
 
-						// Print the total distance for the direct path
+						// Print the total distance and ETA for the direct path
 						printf("Total Distance\t\t: INF\n");
-
-						// Print the ETA for the direct path
 						printf("ETA\t\t\t: INF\n");
 
 						vPrintString("---------------------------------------------------------\n");
@@ -753,13 +727,12 @@ static void vPathCalculationTask(void* pvParameters) {
 
 					vTaskEndScheduler();
 				}
+				// Release the token (mutex)
+				xSemaphoreGive(xMutex);
 			}
-			else if (sel == 3 || 6 || 9) {
+			else if (sel == 3 || sel == 6 || sel == 9) {
 				// Print generated query and user speed
-				printf("User %d\t: %s -> %s\n",
-					i,
-					mallNames[lReceivedValue.srcNode],
-					mallNames[lReceivedValue.dstNode]);
+				printf("User %d\t: %s -> %s\n", i, mallNames[lReceivedValue.srcNode], mallNames[lReceivedValue.dstNode]);
 
 				// Print shortest path
 				printf("Shortest Path\t: ");
@@ -800,10 +773,11 @@ static void vPathCalculationTask(void* pvParameters) {
 
 // Motorist Path & Speed Generation Task [Sender Task]
 static void vMotoristDataTask(void* pvParameters) {
-	srand(time(NULL));
+	srand((unsigned)time(NULL));
 	motorist_batch_t motoristBatch;
-	unsigned int batchCount = 0;
+	uint16_t batchCount = 0;
 	BaseType_t xStatus;
+	const TickType_t delay500 = pdMS_TO_TICKS(500);
 
 	// Randomize path and speed
 	while (true) {
@@ -815,28 +789,30 @@ static void vMotoristDataTask(void* pvParameters) {
 			lValueToSend.dstNode = rand() % N;
 		} while (lValueToSend.srcNode == lValueToSend.dstNode || distanceMatrix[lValueToSend.srcNode][lValueToSend.dstNode] == INF);
 
-		// Randomize traffic condition for every new batch of motorists
-		randTrafficMatrix();
-
 		// Retrieve the traffic condition
-		double trfCondition = trafficMatrix[lValueToSend.srcNode][lValueToSend.dstNode].trfCondition;
+		int trfCondition = trafficMatrix[lValueToSend.srcNode][lValueToSend.dstNode].trfCondition;
 
 		// Generate speed randomly based on traffic condition with the piecewise function
 		int maxSpeed = 0;
 		int minSpeed = 0;
-		if (trfCondition == 0.0) { // Speed range: 80 <= x <= 150 (Acceptable speed)
+
+		// Speed range: 80 <= x <= 150 (Acceptable speed)
+		if (trfCondition == 0) {
 			maxSpeed = 150;
 			minSpeed = 80;
 		}
-		else if (trfCondition > 0.0 && trfCondition <= 5.0) { // Speed range: 51 <= x <= 79
+		// Speed range: 51 <= x <= 79
+		else if (trfCondition > 0 && trfCondition <= 5) {
 			maxSpeed = 79;
 			minSpeed = 51;
 		}
-		else if (trfCondition > 5.0 && trfCondition < 10.0) { // Speed range: 21 <= x <= 50
+		// Speed range: 21 <= x <= 50
+		else if (trfCondition > 5 && trfCondition < 10) {
 			maxSpeed = 50;
 			minSpeed = 21;
 		}
-		else if (trfCondition == 10.0) { // Speed range: 8 <= x <= 20 (Congestion speed)
+		// Speed range: 8 <= x <= 20 (Congestion speed)
+		else if (trfCondition == 10) {
 			maxSpeed = 20;
 			minSpeed = 8;
 		}
@@ -853,6 +829,9 @@ static void vMotoristDataTask(void* pvParameters) {
 			if (xStatus != pdPASS) {
 				vPrintString("Could not send to the queue. \r\n");
 			}
+
+			// Delay after sending the batch
+			vTaskDelay(delay500);
 
 			// Reset the batch count for the next batch
 			batchCount = 0;
@@ -871,7 +850,6 @@ static void vMotoristDataTask(void* pvParameters) {
 // THESE FUNCTIONS ARE MAINLY FOR THE TASK [vUpdateMatricesTask]
 // Update average speed matrix
 void uptAvgSpeedMatrix(int srcNode, int dstNode, double mtSpeed) {
-
 	if (distanceMatrix[srcNode][dstNode] != INF) {
 		avgSpeedMatrix[srcNode][dstNode].pathCount += 1; // Accumulate number of motorist
 		avgSpeedMatrix[srcNode][dstNode].accSpeed += mtSpeed; // Accumulate motorists' speeds
@@ -879,17 +857,17 @@ void uptAvgSpeedMatrix(int srcNode, int dstNode, double mtSpeed) {
 	}
 }
 
-// Update average travelling time
+// Update average traveling time
 void uptAvgTrvTimeMatrix(int srcNode, int dstNode) {
-	if (distanceMatrix[srcNode][dstNode]) {
-		// Average traveling time (in minutes) = (distance / average speed) * 60
+	if (distanceMatrix[srcNode][dstNode] != INF) {
+		// Average traveling time (minutes) = (Distance / Average Speed) * 60
 		avgTimeMatrix[srcNode][dstNode].avgTrvTime = (distanceMatrix[srcNode][dstNode] / avgSpeedMatrix[srcNode][dstNode].avgSpeed) * 60;
 	}
 }
 
 // Print traffic matrix
 void printTrafficMatrix() {
-	printf("-----------------------------Traffic Condition Matrix [0 <= x <= 10]----------------------------\n");
+	printf("------------------------ Traffic Condition Matrix [0 <= x <= 10] ------------------------\n");
 	for (int i = 0; i < 10; i++) {
 		printf("|\t");
 		for (int j = 0; j < 10; j++) {
@@ -898,15 +876,14 @@ void printTrafficMatrix() {
 			else
 				printf("INF\t");
 		}
-		printf("\t|");
-		printf("\n");
+		printf("|\n");
 	}
-	printf("------------------------------------------------------------------------------------------------\n\n");
+	printf("-----------------------------------------------------------------------------------------\n\n");
 }
 
 // Print motorist count 
 void printPathCount() {
-	printf("-------------------------------------Motorist Count Matrix--------------------------------------\n");
+	printf("--------------------------------- Motorist Count Matrix ---------------------------------\n");
 	for (int i = 0; i < 10; i++) {
 		printf("|\t");
 		for (int j = 0; j < 10; j++) {
@@ -915,15 +892,14 @@ void printPathCount() {
 			else
 				printf("INF\t");
 		}
-		printf("\t|");
-		printf("\n");
+		printf("|\n");
 	}
-	printf("------------------------------------------------------------------------------------------------\n\n");
+	printf("-----------------------------------------------------------------------------------------\n\n");
 }
 
 // Print accumulated motorist speed
 void printAccSpeed() {
-	printf("---------------------------Motorist Accumulated Speed Matrix [km/h]-----------------------------\n");
+	printf("------------------------ Motorist Accumulated Speed Matrix [km/h] -----------------------\n");
 	for (int i = 0; i < 10; i++) {
 		printf("|\t");
 		for (int j = 0; j < 10; j++) {
@@ -932,44 +908,41 @@ void printAccSpeed() {
 			else
 				printf("INF\t");
 		}
-		printf("\t|");
-		printf("\n");
+		printf("|\n");
 	}
-	printf("------------------------------------------------------------------------------------------------\n\n");
+	printf("-----------------------------------------------------------------------------------------\n\n");
 }
 
 // Print average motorist speed
 void printAvgSpeed() {
-	printf("-----------------------------Motorist Average Speed Matrix [km/h]-------------------------------\n");
+	printf("-------------------------- Motorist Average Speed Matrix [km/h] -------------------------\n");
 	for (int i = 0; i < 10; i++) {
 		printf("|\t");
 		for (int j = 0; j < 10; j++) {
 			if (avgSpeedMatrix[i][j].avgSpeed != INF)
-				printf("%.0f\t", avgSpeedMatrix[i][j].avgSpeed);
+				printf("%.2f\t", avgSpeedMatrix[i][j].avgSpeed);
 			else
 				printf("INF\t");
 		}
-		printf("\t|");
-		printf("\n");
+		printf("|\n");
 	}
-	printf("------------------------------------------------------------------------------------------------\n\n");
+	printf("-----------------------------------------------------------------------------------------\n\n");
 }
 
-// Print average motorist travelling time
+// Print average motorist traveling time
 void printTimeMatrix() {
-	printf("----------------------Motorist Average Travelling Time Matrix [Minute{s}]-----------------------\n");
+	printf("------------------- Motorist Average Traveling Time Matrix [Minute{s}] ------------------\n");
 	for (int i = 0; i < 10; i++) {
 		printf("|\t");
 		for (int j = 0; j < 10; j++) {
 			if (avgTimeMatrix[i][j].avgTrvTime != INF)
-				printf("%.0f\t", avgTimeMatrix[i][j].avgTrvTime);
+				printf("%.2f\t", avgTimeMatrix[i][j].avgTrvTime);
 			else
 				printf("INF\t");
 		}
-		printf("\t|");
-		printf("\n");
+		printf("|\n");
 	}
-	printf("------------------------------------------------------------------------------------------------\n\n");
+	printf("-----------------------------------------------------------------------------------------\n\n");
 }
 
 // Update Matrices Task [Receiver Task]
@@ -985,7 +958,7 @@ static void vUpdateMatricesTask(void* pvParameters) {
 	xLastWakeTime = xTaskGetTickCount();
 
 	while (true) {
-		// Set 500 ticks for this task's periodic execution
+		// Set to 500ms for periodic task execution
 		vTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(500));
 
 		// Receive data from the queue [mtSpeedQueue]
@@ -1007,7 +980,7 @@ static void vUpdateMatricesTask(void* pvParameters) {
 				}
 
 				// Process each motorist from the received batch
-				for (unsigned int i = 0; i < MOTORIST_BATCH_SIZE; i++) {
+				for (uint16_t i = 0; i < MOTORIST_BATCH_SIZE; i++) {
 					motorist_t motorist = lReceivedValue.motorists[i];
 					int src = motorist.srcNode;
 					int dst = motorist.dstNode;
@@ -1018,15 +991,23 @@ static void vUpdateMatricesTask(void* pvParameters) {
 					uptAvgTrvTimeMatrix(src, dst);
 				}
 
-				if (sel == 1 || 2 || 4 || 5 || 7 || 8) {
+				if (sel == 1 || sel == 2 || sel == 4 || sel == 5 || sel == 7 || sel == 8) {
+					// Print the update status
 					vPrintString(printUpdate);
+
+					// Randomize traffic condition for every new batch of motorists
+					randTrafficMatrix();
 				}
-				else if (sel == 3 || 6 || 9) {
+				else if (sel == 3 || sel == 6 || sel == 9) {
+					// Print the matrices
 					printTrafficMatrix();
 					printPathCount();
 					printAccSpeed();
 					printAvgSpeed();
 					printTimeMatrix();
+
+					// Randomize traffic condition for every new batch of motorists
+					randTrafficMatrix();
 				}
 
 				// Release the token (mutex) after updating the matrices
@@ -1048,19 +1029,18 @@ static void vUpdateMatricesTask(void* pvParameters) {
 }
 
 int main(void) {
-	srand(time(NULL)); // Initialize random seed
+	randTrafficMatrix();		// Initialize the random traffic condition
+	initAverageSpeedMatrix();	// Initialize the average speed
+	initAverageTrvTimeMatrix();	// Initialize the average traveling time
 
-	randTrafficMatrix(); // Initialize the random traffic condition
-	initAverageSpeedMatrix(); // Initialize the average speed
-	initAverageTrvTimeMatrix(); // Initialize the average travelling time
-
-	// Create queue
+	// Create queues
 	queryQueue = xQueueCreate(1, sizeof(query_t));
 	mtSpeedQueue = xQueueCreate(1, sizeof(motorist_batch_t));
 
 	// Create semaphore
 	xMutex = xSemaphoreCreateMutex();
 
+	// Print the main menu
 	vPrintString("Main Menu:\n");
 	vPrintString("1. Dijkstra's Algorithm (Standard) - Evaluate Performance\n");
 	vPrintString("2. Dijkstra's Algorithm (Standard) - Check Accuracy\n");
@@ -1072,6 +1052,7 @@ int main(void) {
 	vPrintString("8. A* Algorithm - Check Accuracy\n");
 	vPrintString("9. A* Algorithm - User Query Automation Generation\n");
 	vPrintString("10. Exit\n");
+
 	printf("\nEnter your choice: ");
 	scanf("%d", &sel);
 	printf("\n");
