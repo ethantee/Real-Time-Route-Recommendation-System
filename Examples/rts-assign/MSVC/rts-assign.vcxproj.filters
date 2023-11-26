@@ -41,9 +41,6 @@
     <ClCompile Include="..\..\..\FreeRTOS_Source\timers.c">
       <Filter>Source Files\FreeRTOS_Source</Filter>
     </ClCompile>
-    <ClCompile Include="test.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="..\main.c">
       <Filter>Source Files</Filter>
     </ClCompile>
