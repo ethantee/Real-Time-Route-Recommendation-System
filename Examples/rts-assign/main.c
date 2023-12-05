@@ -12,7 +12,7 @@
 
 #define N 44						// Number of malls
 #define INF FLT_MAX					// Infinity to represent no direct path
-#define MAX_QUERIES 10000			// Number of user queries
+#define MAX_QUERIES 20000			// Number of user queries
 #define SRC_NODE rand() % N			// Randomize source node
 #define DST_NODE rand() % N			// Randomize destination node
 #define MOTORIST_BATCH_SIZE 5000	// Number of motorists in one batch
