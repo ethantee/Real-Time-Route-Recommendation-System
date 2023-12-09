@@ -2,7 +2,11 @@
 
 ## Overview 📖
 
-This project is part of a simulated real-time system (RTS) assignment focused on designing and implementing a route recommendation system using FreeRTOS. The primary objective is to analyze, design, develop, and evaluate a small-scale, best-route recommendation system that simulates real-time or near real-time route suggestions for motorists in Kuala Lumpur. The system aims to address common drawbacks of existing applications, such as lack of real-time updates and congestion in recommended routes.
+This project is part of a simulated real-time system (RTS) coursework focused on designing and implementing a route recommendation system using FreeRTOS.
+
+The primary objective is to analyze, design, develop, and evaluate a small-scale, best-route recommendation system that simulates real-time or near real-time route suggestions for motorists in Kuala Lumpur.
+
+The system aims to address common drawbacks of existing applications, such as lack of real-time updates and congestion in recommended routes.
 
 ## Key Features 🌟
 
@@ -10,7 +14,7 @@ This project is part of a simulated real-time system (RTS) assignment focused on
 - **Dynamic Data Handling**: Continuously collects, processes, and updates various data types like road networks, driving data, and traffic conditions.
 - **Efficiency Evaluation**: Assesses the system's performance in terms of execution speed and maximum throughput, focusing on real-time characteristics.
 
-## Assignment Tasks ✅
+## Tasks ✅
 
 **Simulation Development**: Design and develop a simulated route recommendation system.
 
@@ -22,4 +26,4 @@ The system should:
 
 ## Technologies and Tools 🛠️
 
-- **FreeRTOS**: Utilized for developing the real-time recommendation system.
+**FreeRTOS**: Utilized for developing the real-time route recommendation system.
